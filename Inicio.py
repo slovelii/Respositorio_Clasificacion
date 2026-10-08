@@ -5,7 +5,23 @@ import pandas as pd
 import re
 from nltk.stem import SnowballStemmer
 
-st.title("🔍 Demo TF-IDF en Español")
+st.set_page_config(
+    page_title="Modelo Mental: TF-IDF y Similitud Coseno",
+    page_icon="🧠",
+    layout="wide"
+)
+
+st.title("🧠 Laboratorio de Recuperación de Información: TF-IDF")
+st.subheader("Entendiendo el Modelo Mental de Espacio Vectorial en PLN")
+
+st.markdown("""
+Esta herramienta demuestra cómo las computadoras comparan textos transformando documentos en **vectores numéricos**. 
+- **TF (Term Frequency)**: Mide la frecuencia de una palabra en un documento específico.
+- **IDF (Inverse Document Frequency)**: Castiga palabras muy comunes en la colección y premia términos raros o informativos.
+- **Similitud Coseno**: Mide el ángulo entre el vector de la consulta y cada documento para determinar relevancia independientemente de la longitud.
+""")
+
+st.divider()
 
 # Documentos de ejemplo
 default_docs = """El perro ladra fuerte en el parque.
@@ -25,7 +41,7 @@ def tokenize_and_stem(text):
     text = re.sub(r'[^a-záéíóúüñ\s]', ' ', text)
     # Tokenizar
     tokens = [t for t in text.split() if len(t) > 1]
-    # Aplicar stemming
+    # Aplicar stemming (reducción a la raíz)
     stems = [stemmer.stem(t) for t in tokens]
     return stems
 
@@ -33,17 +49,20 @@ def tokenize_and_stem(text):
 col1, col2 = st.columns([2, 1])
 
 with col1:
-    text_input = st.text_area("📝 Documentos (uno por línea):", default_docs, height=150)
-    question = st.text_input("❓ Escribe tu pregunta:", "¿Dónde juegan el perro y el gato?")
+    st.markdown("### 📄 Base de Conocimiento (Corpus)")
+    text_input = st.text_area("Documentos (uno por línea):", default_docs, height=160)
+    
+    st.markdown("### ❓ Consulta de Entrada")
+    question = st.text_input("Escribe tu pregunta o término de búsqueda:", "¿Dónde juegan el perro y el gato?")
 
 with col2:
-    st.markdown("### 💡 Preguntas sugeridas:")
+    st.markdown("### 💡 Consultas de Prueba Recomendadas")
+    st.caption("Prueba estas consultas para comparar cómo se comportan los vectores:")
     
-    # NUEVAS preguntas optimizadas para mayor similitud
     if st.button("¿Dónde juegan el perro y el gato?", use_container_width=True):
         st.session_state.question = "¿Dónde juegan el perro y el gato?"
         st.rerun()
-    
+        
     if st.button("¿Qué hacen los niños en el parque?", use_container_width=True):
         st.session_state.question = "¿Qué hacen los niños en el parque?"
         st.rerun()
@@ -64,13 +83,14 @@ with col2:
 if 'question' in st.session_state:
     question = st.session_state.question
 
-if st.button("🔍 Analizar", type="primary"):
+st.markdown("<br>", unsafe_allow_html=True)
+if st.button("⚙️ Calcular Pesos y Evaluar Similitud", type="primary", use_container_width=True):
     documents = [d.strip() for d in text_input.split("\n") if d.strip()]
     
     if len(documents) < 1:
-        st.error("⚠️ Ingresa al menos un documento.")
+        st.error("⚠️ Ingresa al menos un documento en la base de conocimiento.")
     elif not question.strip():
-        st.error("⚠️ Escribe una pregunta.")
+        st.error("⚠️ Escribe una pregunta para calcular la similitud.")
     else:
         # Crear vectorizador TF-IDF
         vectorizer = TfidfVectorizer(
@@ -81,8 +101,10 @@ if st.button("🔍 Analizar", type="primary"):
         # Ajustar con documentos
         X = vectorizer.fit_transform(documents)
         
-        # Mostrar matriz TF-IDF
-        st.markdown("### 📊 Matriz TF-IDF")
+        st.divider()
+        st.markdown("### 📊 1. Representación Vectorial (Matriz TF-IDF)")
+        st.caption("Cada columna representa la raíz (*stem*) de una palabra. El valor asignado crece si la palabra es frecuente en el documento pero decae si está presente en todo el corpus.")
+        
         df_tfidf = pd.DataFrame(
             X.toarray(),
             columns=vectorizer.get_feature_names_out(),
@@ -99,13 +121,29 @@ if st.button("🔍 Analizar", type="primary"):
         best_doc = documents[best_idx]
         best_score = similarities[best_idx]
         
-        # Mostrar respuesta
-        st.markdown("### 🎯 Respuesta")
-        st.markdown(f"**Tu pregunta:** {question}")
+        st.markdown("### 🎯 2. Resultado de la Recuperación por Similitud Coseno")
+        st.markdown(f"**Consulta evaluada:** *{question}*")
         
-        if best_score > 0.01:  # Umbral muy bajo
-            st.success(f"**Respuesta:** {best_doc}")
-            st.info(f"📈 Similitud: {best_score:.3f}")
-        else:
-            st.warning(f"**Respuesta (baja confianza):** {best_doc}")
-            st.info(f"📉 Similitud: {best_score:.3f}")
+        c_res1, c_res2 = st.columns([3, 1])
+        
+        with c_res1:
+            if best_score > 0.01:
+                st.success(f"**Documento más relevante (Doc {best_idx+1}):** {best_doc}")
+            else:
+                st.warning(f"**Documento seleccionado (Baja coincidencia, Doc {best_idx+1}):** {best_doc}")
+                
+        with c_res2:
+            st.metric(label="Puntaje de Similitud", value=f"{best_score:.3f}")
+
+        # Mostrar tabla comparativa de todos los documentos
+        st.markdown("#### Comparativa General de Relevancia")
+        df_results = pd.DataFrame({
+            "Documento": documents,
+            "Puntaje Similitud Coseno": similarities
+        }).sort_values(by="Puntaje Similitud Coseno", ascending=False)
+        
+        st.dataframe(
+            df_results.style.background_gradient(subset=["Puntaje Similitud Coseno"], cmap="Blues")
+            .format({"Puntaje Similitud Coseno": "{:.3f}"}),
+            use_container_width=True
+        )
